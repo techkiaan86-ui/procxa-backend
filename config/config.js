@@ -12,8 +12,8 @@ const requiresSSL = DB_SSL === 'true' || (DB_SSL !== 'false' && isProduction);
 
 // Build Sequelize configuration
 const sequelizeConfig = {
-    host: DB_HOST,
-    port: process.env.DB_PORT,   // 🔥 THIS WAS MISSING
+    host: DB_HOST || '127.0.0.1',
+    port: process.env.DB_PORT || 3306,
     dialect: 'mysql',
     logging: false,
     pool: {
@@ -100,9 +100,7 @@ require('./association')(db);
 // { alter: false } ensures tables are created if missing, but doesn't force schema changes that could lose data
 (async () => {
     try {
-        await db.sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
         await db.sequelize.sync({ alter: false });
-        await db.sequelize.query('SET FOREIGN_KEY_CHECKS = 1');
         console.log('✅ Database schema synchronized successfully');
     } catch (err) {
         console.error('❌ Database synchronization failed:', err.message);

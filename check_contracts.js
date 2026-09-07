@@ -5,7 +5,7 @@ const Contract = db.contract;
 async function checkContracts() {
     try {
         const contracts = await Contract.findAll({
-            attributes: ['id', 'contractName', 'status'],
+            attributes: ['id', 'endDate'],
             raw: true
         });
         console.log('All Contracts:', JSON.stringify(contracts, null, 2));

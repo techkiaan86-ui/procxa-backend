@@ -130,16 +130,7 @@ const add_category = async (req, res) => {
 
 const get_categories = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const userType = req.user?.userType;
-    const isSuperAdmin = userType === 'superadmin';
-
-    const whereClause = isSuperAdmin ? {} : { userId: userId };
-
-    const categories = await category.findAll({
-      where: whereClause,
-      order: [['createdAt', 'DESC']],
-    });
+    const categories = await category.findAll();
 
     return res.status(200).json({
       message: "Categories retrieved successfully",
@@ -155,13 +146,10 @@ const update_category = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const isSuperAdmin = req.user.userType === 'superadmin';
     const { name, type, description } = req.body;
 
-    const whereClause = isSuperAdmin ? { id } : { id, userId };
-
     const cat = await category.findOne({
-      where: whereClause
+      where: { id, userId }
     });
 
     if (!cat) {
@@ -185,12 +173,9 @@ const delete_category = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const isSuperAdmin = req.user.userType === 'superadmin';
-
-    const whereClause = isSuperAdmin ? { id } : { id, userId };
 
     const cat = await category.findOne({
-      where: whereClause
+      where: { id, userId }
     });
 
     if (!cat) {

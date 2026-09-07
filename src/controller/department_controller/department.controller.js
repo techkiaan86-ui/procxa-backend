@@ -1,6 +1,5 @@
 const db = require("../../../config/config");
 const bcrypt = require("bcrypt");
-const { Op } = require("sequelize");
 
 const Department = db.department;
 const sequelize = db.sequelize; // import your sequelize instance
@@ -10,20 +9,6 @@ const add_department = async (req, res) => {
   const userId = req.user.id;
   try {
     const { name, description, email, password, userType, permissions, role, type } = req.body;
-
-    if (email) {
-      const normalizedEmail = email.toLowerCase().trim();
-      const existingDepartment = await Department.findOne({
-        where: { email_id: normalizedEmail }
-      });
-      if (existingDepartment) {
-        return res.status(400).json({
-          status: false,
-          message: "Email ID already exists",
-        });
-      }
-    }
-
     const notEncryptPassword = password;
     // Hash the password before saving
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -31,7 +16,7 @@ const add_department = async (req, res) => {
     const department = await Department.create({
       name,
       description,
-      email_id: email ? email.toLowerCase().trim() : email,
+      email_id: email,
       password: hashedPassword,
       userType,
       userId,
@@ -207,24 +192,6 @@ const update_department = async (req, res) => {
       });
     }
 
-    const emailToUpdate = req.body.email || req.body.email_id;
-    if (emailToUpdate) {
-      const normalizedEmail = emailToUpdate.toLowerCase().trim();
-      const existingDepartment = await Department.findOne({
-        where: {
-          email_id: normalizedEmail,
-          id: { [Op.ne]: id }
-        }
-      });
-      if (existingDepartment) {
-        return res.status(400).json({
-          status: false,
-          message: "Email ID already exists",
-        });
-      }
-      req.body.email_id = normalizedEmail;
-    }
-
     // If password is provided, hash it before updating
     if (req.body.password) {
       req.body.password = await bcrypt.hash(req.body.password, 10);
@@ -287,7 +254,7 @@ const delete_department = async (req, res) => {
     await db.supplier.update({ departmentId: null }, { where: { departmentId: id } });
 
     // Intake Request Approvers (Note: userId field points to department id in this system)
-    await db.intake_request_approvers.destroy({ where: { userId: id, userType: 'department' } });
+    await db.intake_request_approvers.update({ userId: null }, { where: { userId: id, userType: 'department' } });
 
     // SOW Consolidation (requestedTeamDepartmentId)
     await db.service_sow_consolidation.update({ requestedTeamDepartmentId: null }, { where: { requestedTeamDepartmentId: id } });

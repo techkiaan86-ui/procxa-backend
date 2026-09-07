@@ -7,7 +7,7 @@ const Assign_intake_request = db.assign_intake_request;
 const add_supplier = async (req, res) => {
     const userId =req.user.id;
     try {
-        const { name, contactEmail, contactPhone, address, status, categoryId, departmentId } = req.body;
+        const { name, contactEmail, contactPhone, address, status ,categoryId , departmentId,  perUnitPrice, maxUnitPurchase, discountPercent,deliveryTerms ,additionalBenefits } = req.body;
 
         // Check if required fields are empty
         const requiredFields = ['name', 'contactEmail'];
@@ -31,6 +31,7 @@ const add_supplier = async (req, res) => {
             address,
             categoryId,
             departmentId,
+            perUnitPrice, maxUnitPurchase, discountPercent,deliveryTerms ,additionalBenefits ,
             status: status || 'Active',
             userId
         });

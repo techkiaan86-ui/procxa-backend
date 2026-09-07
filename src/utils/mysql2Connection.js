@@ -14,7 +14,8 @@ const requiresSSL = DB_SSL === 'true' || (DB_SSL !== 'false' && isProduction);
 
 // Build connection pool configuration
 const poolConfig = {
-  host: DB_HOST,
+  host: DB_HOST || '127.0.0.1',
+  port: process.env.DB_PORT || 3306,
   user: dbUsername,
   password: DB_PASSWORD,
   database: DB_NAME,

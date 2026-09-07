@@ -71,8 +71,8 @@ const get_dashboard_data = async (req, res) => {
             totalAmount: parseFloat(s.totalAmount),
         }));
 
-        // 3. Spend Dashboard - Monthly (Last 6 Months)
-        const monthlyTransactionData = await Transaction.findAll({
+        // 3. Spend & Savings Dashboard - Monthly (Last 6 Months)
+        const monthlyCategoryData = await Transaction.findAll({
             attributes: [
                 [Sequelize.fn("DATE_FORMAT", Sequelize.col("dateOfTransaction"), "%b %Y"), "month"],
                 [Sequelize.fn("SUM", Sequelize.col("amount")), "totalAmount"],
@@ -88,48 +88,66 @@ const get_dashboard_data = async (req, res) => {
             raw: true,
         });
 
-        // Fetch all categories for reliable name mapping
-        const allCategories = await Category.findAll({ raw: true }).catch(() => []);
-        const resolveCatName = (catVal) => {
-            if (!catVal) return "General";
-            const match = allCategories.find(c => c.id?.toString() === catVal?.toString() || c.name?.toLowerCase() === catVal?.toString()?.toLowerCase());
-            return match ? match.name : catVal.toString();
-        };
-
-        let spendMonthly = [...monthlyTransactionData];
-        let spendYearly = [];
-        let savingsMonthly = [];
-        let savingsYearly = [];
-
-        // Add Intake Requests to Spend analytics if transactions are sparse
-        try {
-            const intakeList = await db.intake_request.findAll({
-                where: { ...adminWhereClause },
-                raw: true
-            });
-
-            intakeList.forEach(i => {
-                const catName = resolveCatName(i.category);
-                const amt = Number(i.requestedAmount || i.estimatedBudget || 0);
-                if (amt > 0) {
-                    const mStr = moment(i.createdAt || new Date()).format("MMM YYYY");
-                    spendMonthly.push({
-                        month: mStr,
-                        totalAmount: amt,
-                        categoryName: catName
-                    });
-                    spendYearly.push({
-                        totalAmount: amt,
-                        categoryName: catName
-                    });
-                }
-            });
-        } catch (intakeErr) {
-            console.error("Intake Dashboard calculation error:", intakeErr);
+        // Generate full list of last 6 months
+        const last6Months = [];
+        for (let i = 5; i >= 0; i--) {
+            last6Months.push(moment().subtract(i, 'months').format('MMM YYYY'));
         }
 
-        // 4. Spend Dashboard - Yearly Transactions
-        const yearlyTransactionData = await Transaction.findAll({
+        // Aggregate monthly spend totals across all categories
+        const monthlySpendTotals = await Transaction.findAll({
+            attributes: [
+                [Sequelize.fn("DATE_FORMAT", Sequelize.col("dateOfTransaction"), "%b %Y"), "month"],
+                [Sequelize.fn("SUM", Sequelize.col("amount")), "spendAmount"],
+            ],
+            where: {
+                ...adminWhereClause,
+                dateOfTransaction: { [Op.between]: [startOfSixMonths, endDate] }
+            },
+            group: ["month"],
+            raw: true,
+        });
+
+        // Fetch cost savings to aggregate by month
+        const CostSaving = db.costSaving;
+        let monthlySavingsTotals = [];
+        if (CostSaving) {
+            try {
+                const allSavings = await CostSaving.findAll({
+                    where: { ...adminWhereClause },
+                    attributes: ['currentPrice', 'proposedPrice', 'createdAt', 'reportingYear', 'benefitStartMonth'],
+                    raw: true
+                });
+
+                // Map savings to months
+                const savingsByMonth = {};
+                allSavings.forEach(item => {
+                    const saveVal = Math.max(0, (parseFloat(item.currentPrice) || 0) - (parseFloat(item.proposedPrice) || 0));
+                    if (saveVal > 0) {
+                        const m = moment(item.createdAt).format('MMM YYYY');
+                        savingsByMonth[m] = (savingsByMonth[m] || 0) + saveVal;
+                    }
+                });
+
+                monthlySavingsTotals = savingsByMonth;
+            } catch (err) {
+                console.warn('Cost savings fetch warning:', err.message);
+            }
+        }
+
+        const spendMap = {};
+        monthlySpendTotals.forEach(item => {
+            spendMap[item.month] = parseFloat(item.spendAmount) || 0;
+        });
+
+        const monthlySpendAndSavings = last6Months.map(m => ({
+            month: m,
+            spendAmount: spendMap[m] || 0,
+            costSavings: monthlySavingsTotals[m] || 0
+        }));
+
+        // 4. Spend Dashboard - Yearly (Current Year)
+        const yearlyCategoryData = await Transaction.findAll({
             attributes: [
                 [Sequelize.fn("SUM", Sequelize.col("amount")), "totalAmount"],
                 [Sequelize.col("category.name"), "categoryName"],
@@ -144,54 +162,8 @@ const get_dashboard_data = async (req, res) => {
             group: ["categoryId", "category.name"],
             raw: true,
         });
-        spendYearly = [...yearlyTransactionData, ...spendYearly];
 
-        // 5. Cost Savings Data (Calculated separately for Cost Savings graph series)
-        try {
-            const costSavingsList = await db.costSaving.findAll({
-                where: { ...adminWhereClause },
-                raw: true
-            });
-
-            costSavingsList.forEach(cs => {
-                const catName = resolveCatName(cs.category);
-                let amt = 0;
-                if (cs.currentPrice || cs.proposedPrice) {
-                    amt = Math.abs(Number(cs.currentPrice || 0) - Number(cs.proposedPrice || 0));
-                }
-                if (!amt && cs.historicalUnitPrice && cs.negotiatedUnitPrice) {
-                    amt = Math.abs(Number(cs.historicalUnitPrice || 0) - Number(cs.negotiatedUnitPrice || 0));
-                }
-                if (!amt && cs.forecastVolumes) {
-                    try {
-                        const fv = typeof cs.forecastVolumes === 'string' ? JSON.parse(cs.forecastVolumes) : cs.forecastVolumes;
-                        Object.values(fv).forEach(y => {
-                            if (y && y["Annualized Benefits"]) {
-                                amt += Math.abs(Number(y["Annualized Benefits"] || 0));
-                            }
-                        });
-                    } catch(e) {}
-                }
-                if (!amt) amt = 200; // Baseline cost saving demo fallback
-
-                const mStr = moment(cs.createdAt || new Date()).format("MMM YYYY");
-
-                savingsMonthly.push({
-                    month: mStr,
-                    totalAmount: amt,
-                    categoryName: catName
-                });
-
-                savingsYearly.push({
-                    totalAmount: amt,
-                    categoryName: catName
-                });
-            });
-        } catch (csErr) {
-            console.error("CostSavings Dashboard calculation error:", csErr);
-        }
-
-        // 6. Coming Renewals in next 6 months (Detailed List Grouped by Department)
+        // 5. Coming Renewals in next 6 months (Detailed List Grouped by Department)
         const sixMonthsFromNow = moment().add(6, 'months').toDate();
         const comingRenewalsDetails = await Contract.findAll({
             where: {
@@ -229,12 +201,9 @@ const get_dashboard_data = async (req, res) => {
                 projectsActive: projectsActive,
             },
             topSuppliers: barGraphData,
-            spendMonthly,
-            savingsMonthly,
-            spendYearly,
-            savingsYearly,
-            categoryDataMonthly: spendMonthly,
-            categoryDataYearly: spendYearly,
+            categoryDataMonthly: monthlyCategoryData,
+            categoryDataYearly: yearlyCategoryData,
+            monthlySpendAndSavings: monthlySpendAndSavings,
             comingRenewals: formattedRenewals
         });
     } catch (error) {

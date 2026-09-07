@@ -7,20 +7,12 @@ const { Op } = require("sequelize");
 // 1. Get List of Contracts for Notification Dropdown
 exports.getContractsForNotification = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const userType = req.user?.userType;
-    const isSuperAdmin = userType === 'superadmin';
-
-    const whereClause = {
-      status: 'approved',
-      endDate: { [Op.ne]: null }
-    };
-    if (!isSuperAdmin && userId) {
-      whereClause.userId = userId;
-    }
-
     const contracts = await IntakeRequest.findAll({
-      where: whereClause,
+      // We only want approved or active requests that have an end date
+      where: {
+        status: 'approved',
+        endDate: { [Op.ne]: null }
+      },
       include: [
         {
           model: InnerDepartment,
@@ -94,19 +86,11 @@ exports.getContractPreference = async (req, res) => {
 // 4. Get All Saved Preferences
 exports.getAllContractPreferences = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const userType = req.user?.userType;
-    const isSuperAdmin = userType === 'superadmin';
-
-    const intakeWhereClause = (!isSuperAdmin && userId) ? { userId: userId } : {};
-
     const preferences = await ContractPreference.findAll({
       include: [
         {
           model: IntakeRequest,
           as: 'intakeDetails',
-          where: intakeWhereClause,
-          required: !isSuperAdmin,
           include: [
             {
               model: InnerDepartment,

@@ -28,16 +28,18 @@ const app = express()
 
 // Define allowed origins (both local and production frontend URLs)
 const allowedOrigins = [
-  'http://localhost:5173',           // Vite dev server (default)
-  'http://localhost:3000',           // Alternative local port
-  'http://localhost:5174',           // Alternative Vite port
-  // 'https://procxa-ai-backend-production.up.railway.app', // Railway backend (for API calls from same domain)
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
+  'http://localhost:5177',
+  'http://localhost:5178',
+  'http://localhost:3000',
   'https://proxa-ai-backend-production-9800.up.railway.app',
-  // 'https://proxa-ai-new.kiaantechnology.com', // Live frontend URL
   'https://procxa.kiaansoftware.com',
-  process.env.FRONTEND_URL,          // Production frontend URL from env
-  process.env.CLIENT_URL,            // Alternative env variable name
-].filter(Boolean); // Remove undefined values
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_URL,
+].filter(Boolean);
 
 // CORS options configuration
 const corsOptions = {
@@ -47,22 +49,18 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // Check if origin is in allowed list
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      // Log blocked origin for debugging
-      console.log(`[CORS] Blocked origin: ${origin}`);
-      // In production, be strict. In development, allow all for easier testing
-      if (process.env.NODE_ENV === 'production') {
-        callback(new Error('Not allowed by CORS'));
-      } else {
-        callback(null, true); // Allow in development
-      }
+    // Allow any localhost / 127.0.0.1 port in development or if listed
+    const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    if (isLocalhost || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
     }
+
+    // Strict in production for unrecognized external domains
+    console.log(`[CORS] Blocked origin: ${origin}`);
+    callback(new Error('Not allowed by CORS'));
   },
-  credentials: true, // Allow cookies and credentials
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'], // Include OPTIONS
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
@@ -72,9 +70,9 @@ const corsOptions = {
     'Origin'
   ],
   exposedHeaders: ['Authorization', 'X-Refresh-Token'],
-  maxAge: 86400, // 24 hours - cache preflight requests
+  maxAge: 86400,
   preflightContinue: false,
-  optionsSuccessStatus: 200 // Some legacy browsers (IE11) choke on 204
+  optionsSuccessStatus: 200
 };
 
 // Apply CORS middleware globally BEFORE routes
@@ -151,7 +149,7 @@ app.use((err, req, res, next) => {
 // SERVER STARTUP
 // ============================================
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
   res.send(`Hello procxa web services, Server is running on port : ${PORT}`)
